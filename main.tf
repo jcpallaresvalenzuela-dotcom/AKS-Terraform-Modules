@@ -47,3 +47,12 @@ module "aks" {
 
   depends_on = [azurerm_role_assignment.subnet_network_contributor]
 }
+
+module "ingress_ip" {
+  source              = "./modules/ingress_ip"
+  aks_name            = module.aks.name
+  aks_rg              = module.aks.resource_group_name
+  ip_name             = "aks-game-ingress-ip"
+  
+  depends_on = [module.aks]
+}

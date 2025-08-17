@@ -24,7 +24,7 @@ resource "azurerm_kubernetes_cluster" "this" {
     network_policy       = "azure"
     load_balancer_sku    = "standard"
     outbound_type        = "loadBalancer"
-
+    
     service_cidr         = var.service_cidr
     dns_service_ip       = var.dns_service_ip
 }

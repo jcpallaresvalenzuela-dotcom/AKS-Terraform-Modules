@@ -11,3 +11,11 @@ output "kubeconfig_raw" {
   value       = module.aks.kubeconfig_raw
   sensitive   = true
 }
+
+output "ingress_public_ip" {
+  value = module.ingress_ip.public_ip
+}
+
+output "ingress_ip_resource_group" {
+  value = module.ingress_ip.resource_group
+}

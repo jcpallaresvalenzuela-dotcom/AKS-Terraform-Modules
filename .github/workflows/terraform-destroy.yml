@@ -1,0 +1,118 @@
+name: Terraform Destroy AKS Cluster
+
+on:
+  # Ejecución manual desde la interfaz de GitHub
+  workflow_dispatch:
+
+env:
+  AKS_NAME: ${{ secrets.AKS_NAME }}
+  RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
+
+jobs:
+  destroy-aks-cluster:
+    name: Destroy AKS Cluster with Terraform
+    runs-on: ubuntu-latest
+    environment: dev
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.0"
+
+      - name: Check AKS Cluster Status
+        id: check-status
+        run: |
+          echo "Checking status of AKS cluster: $AKS_NAME"
+          
+          # Obtener el estado del cluster
+          CLUSTER_STATUS=$(az aks show \
+            --resource-group $RESOURCE_GROUP \
+            --name $AKS_NAME \
+            --query "powerState.code" \
+            --output tsv 2>/dev/null || echo "not_found")
+          
+          echo "Cluster status: $CLUSTER_STATUS"
+          
+          if [ "$CLUSTER_STATUS" = "not_found" ]; then
+            echo "Cluster not found, nothing to destroy"
+            echo "status=not_found" >> $GITHUB_OUTPUT
+          elif [ "$CLUSTER_STATUS" = "Running" ]; then
+            echo "Cluster is running, will destroy it"
+            echo "status=running" >> $GITHUB_OUTPUT
+          elif [ "$CLUSTER_STATUS" = "Stopped" ]; then
+            echo "Cluster is stopped, will destroy it"
+            echo "status=stopped" >> $GITHUB_OUTPUT
+          else
+            echo "Unknown cluster status: $CLUSTER_STATUS"
+            echo "status=unknown" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Auto-Confirm Destruction
+        if: steps.check-status.outputs.status != 'not_found'
+        run: |
+          echo "✅ Destrucción automáticamente confirmada. Procediendo con Terraform destroy..."
+
+      - name: Terraform Init
+        if: steps.check-status.outputs.status != 'not_found'
+        working-directory: ./
+        run: |
+          echo "Initializing Terraform..."
+          terraform init
+
+      - name: Terraform Plan Destroy
+        if: steps.check-status.outputs.status != 'not_found'
+        working-directory: ./
+        run: |
+          echo "Planning Terraform destroy..."
+          terraform plan -destroy -out=destroy.tfplan
+
+      - name: Terraform Destroy
+        if: steps.check-status.outputs.status != 'not_found'
+        working-directory: ./
+        run: |
+          echo "Executing Terraform destroy..."
+          terraform apply -auto-approve destroy.tfplan
+          
+          echo "✅ Terraform destroy completed successfully"
+
+      - name: Verify Destruction
+        if: steps.check-status.outputs.status != 'not_found'
+        run: |
+          echo "Verifying cluster destruction..."
+          
+          # Esperar un poco para que Azure procese la eliminación
+          sleep 30
+          
+          # Verificar que el cluster ya no existe
+          if az aks show \
+            --resource-group $RESOURCE_GROUP \
+            --name $AKS_NAME \
+            --query "name" \
+            --output tsv 2>/dev/null; then
+            echo "⚠️ Cluster still exists, may take longer to destroy"
+          else
+            echo "✅ Cluster successfully destroyed"
+          fi
+
+      - name: Skip Destroy (No Cluster)
+        if: steps.check-status.outputs.status == 'not_found'
+        run: |
+          echo "✅ No AKS cluster found to destroy. Nothing to do."
+
+      - name: Summary
+        run: |
+          echo "=== Terraform Destroy Workflow Summary ==="
+          echo "Cluster Name: $AKS_NAME"
+          echo "Resource Group: $RESOURCE_GROUP"
+          echo "Execution Time: $(date -u)"
+          echo "Workflow Status: ${{ job.status }}"
+          echo "========================================"

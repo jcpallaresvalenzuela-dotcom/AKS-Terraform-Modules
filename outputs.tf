@@ -1,9 +1,11 @@
 output "resource_group_name" {
   value = module.rg.name
+  sensitive = true
 }
 
 output "aks_name" {
   value = module.aks.name
+  sensitive = true
 }
 
 output "kubeconfig_raw" {

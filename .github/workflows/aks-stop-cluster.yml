@@ -1,0 +1,109 @@
+name: Stop AKS Cluster
+
+on:
+  # Ejecución programada diaria a las 01:00 UTC (puedes ajustar la hora)
+  schedule:
+    - cron: '0 1 * * *'
+  
+  # Ejecución manual desde la interfaz de GitHub
+  workflow_dispatch:
+
+env:
+  AKS_NAME: ${{ secrets.AKS_NAME }}
+  RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
+
+jobs:
+  stop-aks-cluster:
+    name: Stop AKS Cluster
+    runs-on: ubuntu-latest
+    environment: dev
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Check AKS Cluster Status
+        id: check-status
+        run: |
+          echo "Checking status of AKS cluster: $AKS_NAME"
+          
+          # Obtener el estado del cluster
+          CLUSTER_STATUS=$(az aks show \
+            --resource-group $RESOURCE_GROUP \
+            --name $AKS_NAME \
+            --query "powerState.code" \
+            --output tsv 2>/dev/null || echo "error")
+          
+          echo "Cluster status: $CLUSTER_STATUS"
+          
+          # Verificar si el cluster está parado
+          if [ "$CLUSTER_STATUS" = "Stopped" ]; then
+            echo "Cluster is already stopped"
+            echo "status=stopped" >> $GITHUB_OUTPUT
+          elif [ "$CLUSTER_STATUS" = "error" ]; then
+            echo "Error getting cluster status or cluster not found"
+            echo "status=error" >> $GITHUB_OUTPUT
+          else
+            echo "Cluster is running, will stop it"
+            echo "status=running" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Stop AKS Cluster
+        if: steps.check-status.outputs.status == 'running'
+        run: |
+          echo "Stopping AKS cluster: $AKS_NAME"
+          
+          # Parar el cluster
+          az aks stop \
+            --resource-group $RESOURCE_GROUP \
+            --name $AKS_NAME
+          
+          echo "Cluster stop command executed successfully"
+          
+          # Esperar un poco y verificar el estado
+          sleep 30
+          
+          # Verificar el estado final
+          FINAL_STATUS=$(az aks show \
+            --resource-group $RESOURCE_GROUP \
+            --name $AKS_NAME \
+            --query "powerState.code" \
+            --output tsv)
+          
+          echo "Final cluster status: $FINAL_STATUS"
+          
+          if [ "$FINAL_STATUS" = "Stopped" ]; then
+            echo "✅ Cluster stopped successfully"
+          else
+            echo "⚠️ Cluster may still be stopping or there was an issue"
+            exit 1
+          fi
+
+      - name: Skip Stop (Already Stopped)
+        if: steps.check-status.outputs.status == 'stopped'
+        run: |
+          echo "✅ Cluster $AKS_NAME is already stopped. No action needed."
+
+      - name: Handle Error
+        if: steps.check-status.outputs.status == 'error'
+        run: |
+          echo "❌ Error: Could not determine cluster status or cluster not found"
+          echo "Please check:"
+          echo "1. Cluster name: $AKS_NAME"
+          echo "2. Resource group: $RESOURCE_GROUP"
+          echo "3. Azure credentials and permissions"
+          exit 1
+
+      - name: Summary
+        run: |
+          echo "=== AKS Cluster Stop Workflow Summary ==="
+          echo "Cluster Name: $AKS_NAME"
+          echo "Resource Group: $RESOURCE_GROUP"
+          echo "Execution Time: $(date -u)"
+          echo "Workflow Status: ${{ job.status }}"
+          echo "========================================"

@@ -68,19 +68,12 @@ jobs:
           echo "Initializing Terraform..."
           terraform init
 
-      - name: Terraform Plan Destroy
-        if: steps.check-status.outputs.status != 'not_found'
-        working-directory: ./
-        run: |
-          echo "Planning Terraform destroy..."
-          terraform plan -destroy -out=destroy.tfplan
-
       - name: Terraform Destroy
         if: steps.check-status.outputs.status != 'not_found'
         working-directory: ./
         run: |
-          echo "Executing Terraform destroy..."
-          terraform apply -auto-approve destroy.tfplan
+          echo "Planning Terraform destroy..."
+          terraform destroy -auto-approve
           
           echo "✅ Terraform destroy completed successfully"
 

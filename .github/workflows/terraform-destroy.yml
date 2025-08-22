@@ -73,7 +73,7 @@ jobs:
         working-directory: ./
         run: |
           echo "Planning Terraform destroy..."
-          terraform destroy -auto-approve -var-file="terraform.tfvars"
+          terraform destroy -auto-approve
           
           echo "✅ Terraform destroy completed successfully"
 
@@ -109,3 +109,23 @@ jobs:
           echo "Execution Time: $(date -u)"
           echo "Workflow Status: ${{ job.status }}"
           echo "========================================"
+
+      - name: Diagnostic Information (On Failure)
+        if: failure()
+        working-directory: ./
+        run: |
+          echo "=== DIAGNOSTIC INFORMATION ==="
+          echo "Current directory: $(pwd)"
+          echo "Files in directory:"
+          ls -la
+          echo ""
+          echo "Terraform state info:"
+          if [ -f "terraform.tfstate" ]; then
+            terraform show -json | jq -r '.values.root_module.resources[]?.address // empty' 2>/dev/null || echo "Could not parse state"
+          else
+            echo "No state file found"
+          fi
+          echo ""
+          echo "Azure resources check:"
+          az resource list --resource-group $RESOURCE_GROUP --query "[].{name:name, type:type, location:location}" --output table 2>/dev/null || echo "Could not list Azure resources"
+          echo "================================"

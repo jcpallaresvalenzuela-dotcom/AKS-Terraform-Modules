@@ -73,7 +73,7 @@ jobs:
         working-directory: ./
         run: |
           echo "Planning Terraform destroy..."
-          terraform destroy -auto-approve
+          terraform destroy -auto-approve -var-file="terraform.tfvars"
           
           echo "✅ Terraform destroy completed successfully"
 

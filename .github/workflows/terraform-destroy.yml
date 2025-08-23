@@ -25,13 +25,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Azure OIDC Login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -54,6 +47,11 @@ jobs:
       - name: Terraform Init - Ingress IP
         if: steps.check-ingress.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
         run: |
           echo "Initializing Terraform for Ingress IP destruction..."
           terraform init
@@ -61,6 +59,11 @@ jobs:
       - name: Terraform Destroy - Ingress IP
         if: steps.check-ingress.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
         run: |
           echo "Destroying Ingress IP infrastructure..."
           terraform destroy -auto-approve
@@ -88,13 +91,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Azure OIDC Login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -117,6 +113,11 @@ jobs:
       - name: Terraform Init - AKS
         if: steps.check-aks.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
         run: |
           echo "Initializing Terraform for AKS destruction..."
           terraform init
@@ -124,6 +125,11 @@ jobs:
       - name: Terraform Destroy - AKS
         if: steps.check-aks.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
         run: |
           echo "Destroying AKS cluster infrastructure..."
           terraform destroy -auto-approve
@@ -158,13 +164,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Azure OIDC Login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -187,6 +186,11 @@ jobs:
       - name: Terraform Init - Network
         if: steps.check-network.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
         run: |
           echo "Initializing Terraform for Network destruction..."
           terraform init
@@ -194,6 +198,11 @@ jobs:
       - name: Terraform Destroy - Network
         if: steps.check-network.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
         run: |
           echo "Destroying Network infrastructure..."
           terraform destroy -auto-approve
@@ -221,13 +230,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Azure OIDC Login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -250,6 +252,11 @@ jobs:
       - name: Terraform Init - Identity
         if: steps.check-identity.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
         run: |
           echo "Initializing Terraform for Identity destruction..."
           terraform init
@@ -257,6 +264,11 @@ jobs:
       - name: Terraform Destroy - Identity
         if: steps.check-identity.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
         run: |
           echo "Destroying Identity infrastructure..."
           terraform destroy -auto-approve
@@ -284,13 +296,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Azure OIDC Login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -313,6 +318,11 @@ jobs:
       - name: Terraform Init - Resource Group
         if: steps.check-rg.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
         run: |
           echo "Initializing Terraform for Resource Group destruction..."
           terraform init
@@ -320,6 +330,11 @@ jobs:
       - name: Terraform Destroy - Resource Group
         if: steps.check-rg.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
         run: |
           echo "Destroying Resource Group infrastructure..."
           terraform destroy -auto-approve

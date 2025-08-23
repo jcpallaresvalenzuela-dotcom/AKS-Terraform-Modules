@@ -73,7 +73,7 @@ jobs:
       - name: Validate Override Variables
         run: |
           echo "=== Override Variables Validation ==="
-          OVERRIDE_VARS="${{ github.event.inputs.override_variables }}"
+          OVERRIDE_VARS='${{ github.event.inputs.override_variables }}'
           
           if [ "$OVERRIDE_VARS" != "{}" ]; then
             echo "Override variables provided: $OVERRIDE_VARS"
@@ -166,7 +166,7 @@ jobs:
           echo "name_prefix = \"${{ github.event.inputs.name_prefix }}\"" >> terraform.tfvars
           
           # Aplicar tags
-          TAGS="${{ github.event.inputs.tags }}"
+          TAGS='${{ github.event.inputs.tags }}'
           if [ "$TAGS" != "{}" ]; then
             echo "Applying tags..."
             echo "tags = {" >> terraform.tfvars
@@ -175,7 +175,7 @@ jobs:
           fi
           
           # Aplicar overrides si se especifican
-          OVERRIDE_VARS="${{ github.event.inputs.override_variables }}"
+          OVERRIDE_VARS='${{ github.event.inputs.override_variables }}'
           if [ "$OVERRIDE_VARS" != "{}" ]; then
             echo "Applying variable overrides..."
             echo "$OVERRIDE_VARS" | jq -r 'to_entries[] | "\(.key) = \"\(.value)\""' >> terraform.tfvars
@@ -285,7 +285,7 @@ jobs:
           echo "name_prefix = \"${{ github.event.inputs.name_prefix }}\"" >> terraform.tfvars
           
           # Aplicar tags
-          TAGS="${{ github.event.inputs.tags }}"
+          TAGS='${{ github.event.inputs.tags }}'
           if [ "$TAGS" != "{}" ]; then
             echo "Applying tags..."
             echo "tags = {" >> terraform.tfvars
@@ -294,7 +294,7 @@ jobs:
           fi
           
           # Aplicar overrides si se especifican
-          OVERRIDE_VARS="${{ github.event.inputs.override_variables }}"
+          OVERRIDE_VARS='${{ github.event.inputs.override_variables }}'
           if [ "$OVERRIDE_VARS" != "{}" ]; then
             echo "Applying variable overrides..."
             echo "$OVERRIDE_VARS" | jq -r 'to_entries[] | "\(.key) = \"\(.value)\""' >> terraform.tfvars
@@ -401,7 +401,7 @@ jobs:
           echo "name_prefix = \"${{ github.event.inputs.name_prefix }}\"" >> terraform.tfvars
           
           # Aplicar tags
-          TAGS="${{ github.event.inputs.tags }}"
+          TAGS='${{ github.event.inputs.tags }}'
           if [ "$TAGS" != "{}" ]; then
             echo "Applying tags..."
             echo "tags = {" >> terraform.tfvars
@@ -410,7 +410,7 @@ jobs:
           fi
           
           # Aplicar overrides si se especifican
-          OVERRIDE_VARS="${{ github.event.inputs.override_variables }}"
+          OVERRIDE_VARS='${{ github.event.inputs.override_variables }}'
           if [ "$OVERRIDE_VARS" != "{}" ]; then
             echo "Applying variable overrides..."
             echo "$OVERRIDE_VARS" | jq -r 'to_entries[] | "\(.key) = \"\(.value)\""' >> terraform.tfvars
@@ -520,7 +520,7 @@ jobs:
           echo "name_prefix = \"${{ github.event.inputs.name_prefix }}\"" >> terraform.tfvars
           
           # Aplicar tags
-          TAGS="${{ github.event.inputs.tags }}"
+          TAGS='${{ github.event.inputs.tags }}'
           if [ "$TAGS" != "{}" ]; then
             echo "Applying tags..."
             echo "tags = {" >> terraform.tfvars
@@ -529,7 +529,7 @@ jobs:
           fi
           
           # Aplicar overrides si se especifican
-          OVERRIDE_VARS="${{ github.event.inputs.override_variables }}"
+          OVERRIDE_VARS='${{ github.event.inputs.override_variables }}'
           if [ "$OVERRIDE_VARS" != "{}" ]; then
             echo "Applying variable overrides..."
             echo "$OVERRIDE_VARS" | jq -r 'to_entries[] | "\(.key) = \"\(.value)\""' >> terraform.tfvars
@@ -646,7 +646,7 @@ jobs:
           echo "name_prefix = \"${{ github.event.inputs.name_prefix }}\"" >> terraform.tfvars
           
           # Aplicar tags
-          TAGS="${{ github.event.inputs.tags }}"
+          TAGS='${{ github.event.inputs.tags }}'
           if [ "$TAGS" != "{}" ]; then
             echo "Applying tags..."
             echo "tags = {" >> terraform.tfvars
@@ -655,7 +655,7 @@ jobs:
           fi
           
           # Aplicar overrides si se especifican
-          OVERRIDE_VARS="${{ github.event.inputs.override_variables }}"
+          OVERRIDE_VARS='${{ github.event.inputs.override_variables }}'
           if [ "$OVERRIDE_VARS" != "{}" ]; then
             echo "Applying variable overrides..."
             echo "$OVERRIDE_VARS" | jq -r 'to_entries[] | "\(.key) = \"\(.value)\""' >> terraform.tfvars

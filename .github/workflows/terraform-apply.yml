@@ -53,7 +53,7 @@ jobs:
         id: validation
         run: |
           echo "=== Environment Validation ==="
-          echo "Selected Environment: ${{ env.ENVIRONMENT }}"
+          echo "Selected Environment: ${{ github.event.inputs.environment }}"
           
           if [ "${{ github.event.inputs.confirm_deployment }}" != "true" ]; then
             echo "❌ Deployment not confirmed. Please set confirm_deployment to true."
@@ -61,8 +61,8 @@ jobs:
             exit 1
           fi
           
-          if [ ! -d "./environment/${{ env.ENVIRONMENT }}" ]; then
-            echo "❌ Environment directory ./environment/${{ env.ENVIRONMENT }} not found"
+          if [ ! -d "./environment/${{ github.event.inputs.environment }}" ]; then
+            echo "❌ Environment directory ./environment/${{ github.event.inputs.environment }} not found"
             echo "status=failed" >> $GITHUB_OUTPUT
             exit 1
           fi
@@ -132,7 +132,7 @@ jobs:
 
       - name: Check Resource Group Module Status
         id: check-rg
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+        working-directory: ./environment/${{ github.event.inputs.environment }}/020-resource_group
         run: |
           echo "Checking if Resource Group module exists..."
           
@@ -146,14 +146,14 @@ jobs:
 
       - name: Prepare Terraform Variables - Resource Group
         if: steps.check-rg.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+        working-directory: ./environment/${{ github.event.inputs.environment }}/020-resource_group
         run: |
           echo "=== Preparing Terraform Variables for Resource Group ==="
           
           # Copiar tfvars base del environment
-          if [ -f "terraform.tfvars.${{ env.ENVIRONMENT }}" ]; then
-            cp "terraform.tfvars.${{ env.ENVIRONMENT }}" terraform.tfvars
-            echo "✅ Using environment-specific tfvars: terraform.tfvars.${{ env.ENVIRONMENT }}"
+          if [ -f "terraform.tfvars.${{ github.event.inputs.environment }}" ]; then
+            cp "terraform.tfvars.${{ github.event.inputs.environment }}" terraform.tfvars
+            echo "✅ Using environment-specific tfvars: terraform.tfvars.${{ github.event.inputs.environment }}"
           elif [ -f "terraform.tfvars.example" ]; then
             cp terraform.tfvars.example terraform.tfvars
             echo "✅ Using example tfvars as base"
@@ -186,7 +186,7 @@ jobs:
 
       - name: Terraform Init - Resource Group
         if: steps.check-rg.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+        working-directory: ./environment/${{ github.event.inputs.environment }}/020-resource_group
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -198,7 +198,7 @@ jobs:
 
       - name: Terraform Plan - Resource Group
         if: steps.check-rg.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+        working-directory: ./environment/${{ github.event.inputs.environment }}/020-resource_group
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -210,7 +210,7 @@ jobs:
 
       - name: Terraform Apply - Resource Group
         if: steps.check-rg.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+        working-directory: ./environment/${{ github.event.inputs.environment }}/020-resource_group
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -251,7 +251,7 @@ jobs:
 
       - name: Check Identity Module Status
         id: check-identity
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+        working-directory: ./environment/${{ github.event.inputs.environment }}/030-identity
         run: |
           echo "Checking if Identity module exists..."
           
@@ -265,14 +265,14 @@ jobs:
 
       - name: Prepare Terraform Variables - Identity
         if: steps.check-identity.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+        working-directory: ./environment/${{ github.event.inputs.environment }}/030-identity
         run: |
           echo "=== Preparing Terraform Variables for Identity ==="
           
           # Copiar tfvars base del environment
-          if [ -f "terraform.tfvars.${{ env.ENVIRONMENT }}" ]; then
-            cp "terraform.tfvars.${{ env.ENVIRONMENT }}" terraform.tfvars
-            echo "✅ Using environment-specific tfvars: terraform.tfvars.${{ env.ENVIRONMENT }}"
+          if [ -f "terraform.tfvars.${{ github.event.inputs.environment }}" ]; then
+            cp "terraform.tfvars.${{ github.event.inputs.environment }}" terraform.tfvars
+            echo "✅ Using environment-specific tfvars: terraform.tfvars.${{ github.event.inputs.environment }}"
           elif [ -f "terraform.tfvars.example" ]; then
             cp terraform.tfvars.example terraform.tfvars
             echo "✅ Using example tfvars as base"
@@ -305,7 +305,7 @@ jobs:
 
       - name: Terraform Init - Identity
         if: steps.check-identity.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+        working-directory: ./environment/${{ github.event.inputs.environment }}/030-identity
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -317,7 +317,7 @@ jobs:
 
       - name: Terraform Plan - Identity
         if: steps.check-identity.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+        working-directory: ./environment/${{ github.event.inputs.environment }}/030-identity
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -329,7 +329,7 @@ jobs:
 
       - name: Terraform Apply - Identity
         if: steps.check-identity.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+        working-directory: ./environment/${{ github.event.inputs.environment }}/030-identity
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -370,7 +370,7 @@ jobs:
 
       - name: Check Network Module Status
         id: check-network
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+        working-directory: ./environment/${{ github.event.inputs.environment }}/040-network
         run: |
           echo "Checking if Network module exists..."
           
@@ -384,14 +384,14 @@ jobs:
 
       - name: Prepare Terraform Variables - Network
         if: steps.check-network.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+        working-directory: ./environment/${{ github.event.inputs.environment }}/040-network
         run: |
           echo "=== Preparing Terraform Variables for Network ==="
           
           # Copiar tfvars base del environment
-          if [ -f "terraform.tfvars.${{ env.ENVIRONMENT }}" ]; then
-            cp "terraform.tfvars.${{ env.ENVIRONMENT }}" terraform.tfvars
-            echo "✅ Using environment-specific tfvars: terraform.tfvars.${{ env.ENVIRONMENT }}"
+          if [ -f "terraform.tfvars.${{ github.event.inputs.environment }}" ]; then
+            cp "terraform.tfvars.${{ github.event.inputs.environment }}" terraform.tfvars
+            echo "✅ Using environment-specific tfvars: terraform.tfvars.${{ github.event.inputs.environment }}"
           elif [ -f "terraform.tfvars.example" ]; then
             cp terraform.tfvars.example terraform.tfvars
             echo "✅ Using example tfvars as base"
@@ -421,7 +421,7 @@ jobs:
 
       - name: Terraform Init - Network
         if: steps.check-network.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+        working-directory: ./environment/${{ github.event.inputs.environment }}/040-network
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -433,7 +433,7 @@ jobs:
 
       - name: Terraform Plan - Network
         if: steps.check-network.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+        working-directory: ./environment/${{ github.event.inputs.environment }}/040-network
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -445,7 +445,7 @@ jobs:
 
       - name: Terraform Apply - Network
         if: steps.check-network.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+        working-directory: ./environment/${{ github.event.inputs.environment }}/040-network
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -486,7 +486,7 @@ jobs:
 
       - name: Check AKS Module Status
         id: check-aks
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
+        working-directory: ./environment/${{ github.event.inputs.environment }}/010-aks
         run: |
           echo "Checking if AKS module exists..."
           
@@ -500,14 +500,14 @@ jobs:
 
       - name: Prepare Terraform Variables - AKS
         if: steps.check-aks.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
+        working-directory: ./environment/${{ github.event.inputs.environment }}/010-aks
         run: |
           echo "=== Preparing Terraform Variables for AKS ==="
           
           # Copiar tfvars base del environment
-          if [ -f "terraform.tfvars.${{ env.ENVIRONMENT }}" ]; then
-            cp "terraform.tfvars.${{ env.ENVIRONMENT }}" terraform.tfvars
-            echo "✅ Using environment-specific tfvars: terraform.tfvars.${{ env.ENVIRONMENT }}"
+          if [ -f "terraform.tfvars.${{ github.event.inputs.environment }}" ]; then
+            cp "terraform.tfvars.${{ github.event.inputs.environment }}" terraform.tfvars
+            echo "✅ Using environment-specific tfvars: terraform.tfvars.${{ github.event.inputs.environment }}"
           elif [ -f "terraform.tfvars.example" ]; then
             cp terraform.tfvars.example terraform.tfvars
             echo "✅ Using example tfvars as base"
@@ -540,7 +540,7 @@ jobs:
 
       - name: Terraform Init - AKS
         if: steps.check-aks.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
+        working-directory: ./environment/${{ github.event.inputs.environment }}/010-aks
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -552,7 +552,7 @@ jobs:
 
       - name: Terraform Plan - AKS
         if: steps.check-aks.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
+        working-directory: ./environment/${{ github.event.inputs.environment }}/010-aks
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -564,7 +564,7 @@ jobs:
 
       - name: Terraform Apply - AKS
         if: steps.check-aks.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
+        working-directory: ./environment/${{ github.event.inputs.environment }}/010-aks
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -612,7 +612,7 @@ jobs:
 
       - name: Check Ingress IP Status
         id: check-ingress
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
+        working-directory: ./environment/${{ github.event.inputs.environment }}/050-ingress_ip
         run: |
           echo "Checking if Ingress IP module exists..."
           
@@ -626,14 +626,14 @@ jobs:
 
       - name: Prepare Terraform Variables - Ingress IP
         if: steps.check-ingress.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
+        working-directory: ./environment/${{ github.event.inputs.environment }}/050-ingress_ip
         run: |
           echo "=== Preparing Terraform Variables for Ingress IP ==="
           
           # Copiar tfvars base del environment
-          if [ -f "terraform.tfvars.${{ env.ENVIRONMENT }}" ]; then
-            cp "terraform.tfvars.${{ env.ENVIRONMENT }}" terraform.tfvars
-            echo "✅ Using environment-specific tfvars: terraform.tfvars.${{ env.ENVIRONMENT }}"
+          if [ -f "terraform.tfvars.${{ github.event.inputs.environment }}" ]; then
+            cp "terraform.tfvars.${{ github.event.inputs.environment }}" terraform.tfvars
+            echo "✅ Using environment-specific tfvars: terraform.tfvars.${{ github.event.inputs.environment }}"
           elif [ -f "terraform.tfvars.example" ]; then
             cp terraform.tfvars.example terraform.tfvars
             echo "✅ Using example tfvars as base"
@@ -666,7 +666,7 @@ jobs:
 
       - name: Terraform Init - Ingress IP
         if: steps.check-ingress.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
+        working-directory: ./environment/${{ github.event.inputs.environment }}/050-ingress_ip
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -678,7 +678,7 @@ jobs:
 
       - name: Terraform Plan - Ingress IP
         if: steps.check-ingress.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
+        working-directory: ./environment/${{ github.event.inputs.environment }}/050-ingress_ip
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -690,7 +690,7 @@ jobs:
 
       - name: Terraform Apply - Ingress IP
         if: steps.check-ingress.outputs.exists == 'true'
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
+        working-directory: ./environment/${{ github.event.inputs.environment }}/050-ingress_ip
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -732,7 +732,7 @@ jobs:
       - name: Final Verification
         run: |
           echo "=== Final Creation Verification ==="
-          echo "Environment: ${{ env.ENVIRONMENT }}"
+          echo "Environment: ${{ github.event.inputs.environment }}"
           
           # Verificar que todos los recursos se crearon correctamente
           echo "Checking that all resources were created successfully..."
@@ -768,8 +768,8 @@ jobs:
           if [ "${{ needs.create-aks.outputs.aks_created }}" == "created" ]; then
             echo "Checking AKS cluster health..."
             # Obtener el nombre del cluster y resource group desde la configuración
-            CLUSTER_NAME=$(grep -o 'cluster_name[[:space:]]*=[[:space:]]*"[^"]*"' ./environment/${{ env.ENVIRONMENT }}/010-aks/terraform.tfvars | cut -d'"' -f2)
-            RESOURCE_GROUP=$(grep -o 'resource_group_name[[:space:]]*=[[:space:]]*"[^"]*"' ./environment/${{ env.ENVIRONMENT }}/010-aks/terraform.tfvars | cut -d'"' -f2)
+            CLUSTER_NAME=$(grep -o 'cluster_name[[:space:]]*=[[:space:]]*"[^"]*"' ./environment/${{ github.event.inputs.environment }}/010-aks/terraform.tfvars | cut -d'"' -f2)
+            RESOURCE_GROUP=$(grep -o 'resource_group_name[[:space:]]*=[[:space:]]*"[^"]*"' ./environment/${{ github.event.inputs.environment }}/010-aks/terraform.tfvars | cut -d'"' -f2)
             
             if [ ! -z "$CLUSTER_NAME" ] && [ ! -z "$RESOURCE_GROUP" ]; then
               echo "Cluster: $CLUSTER_NAME in Resource Group: $RESOURCE_GROUP"

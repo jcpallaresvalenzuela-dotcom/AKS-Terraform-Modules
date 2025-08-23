@@ -1,0 +1,412 @@
+name: Terraform Apply AKS Cluster - Modular Deployment
+
+on:
+  # Ejecución manual desde la interfaz de GitHub
+  workflow_dispatch:
+
+env:
+  AKS_NAME: ${{ secrets.AKS_NAME }}
+  RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
+  ENVIRONMENT: "dev"
+  TERRAFORM_VERSION: "1.6.0"
+
+jobs:
+  # Job 0: Desplegar la infraestructura del backend de Terraform (PRIMERO)
+  deploy-terraform-backend:
+    name: Deploy Terraform Backend Infrastructure
+    runs-on: ubuntu-latest
+    environment: dev
+    outputs:
+      resource_group_name: ${{ steps.terraform-output.outputs.resource_group_name }}
+      storage_account_name: ${{ steps.terraform-output.outputs.storage_account_name }}
+      container_name: ${{ steps.terraform-output.outputs.container_name }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Init - Backend Infrastructure
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/000-terraform_backend
+        run: |
+          echo "Initializing Terraform for Backend Infrastructure..."
+          terraform init
+
+      - name: Terraform Plan - Backend Infrastructure
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/000-terraform_backend
+        run: |
+          echo "Planning Terraform apply for Backend Infrastructure..."
+          terraform plan -out=apply.tfplan
+
+      - name: Terraform Apply - Backend Infrastructure
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/000-terraform_backend
+        run: |
+          echo "Executing Terraform apply for Backend Infrastructure..."
+          terraform apply -auto-approve apply.tfplan
+          echo "✅ Backend Infrastructure deployed successfully"
+
+      - name: Get Backend Infrastructure Outputs
+        id: terraform-output
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/000-terraform_backend
+        run: |
+          echo "resource_group_name=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
+          echo "storage_account_name=$(terraform output -raw storage_account_name)" >> $GITHUB_OUTPUT
+          echo "container_name=$(terraform output -raw container_name)" >> $GITHUB_OUTPUT
+
+  # Job 1: Desplegar Resource Group (base para todos los recursos)
+  deploy-resource-group:
+    name: Deploy Resource Group
+    runs-on: ubuntu-latest
+    environment: dev
+    needs: deploy-terraform-backend
+    outputs:
+      resource_group_name: ${{ steps.terraform-output.outputs.resource_group_name }}
+      resource_group_location: ${{ steps.terraform-output.outputs.resource_group_location }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Init - Resource Group
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+        run: |
+          echo "Initializing Terraform for Resource Group..."
+          terraform init
+
+      - name: Terraform Plan - Resource Group
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+        run: |
+          echo "Planning Terraform apply for Resource Group..."
+          terraform plan -out=apply.tfplan
+
+      - name: Terraform Apply - Resource Group
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+        run: |
+          echo "Executing Terraform apply for Resource Group..."
+          terraform apply -auto-approve apply.tfplan
+          echo "✅ Resource Group deployed successfully"
+
+      - name: Get Resource Group Outputs
+        id: terraform-output
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+        run: |
+          echo "resource_group_name=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
+          echo "resource_group_location=$(terraform output -raw resource_group_location)" >> $GITHUB_OUTPUT
+
+  # Job 2: Desplegar Identity (depende del Resource Group)
+  deploy-identity:
+    name: Deploy Identity
+    runs-on: ubuntu-latest
+    environment: dev
+    needs: deploy-resource-group
+    outputs:
+      identity_id: ${{ steps.terraform-output.outputs.identity_id }}
+      identity_principal_id: ${{ steps.terraform-output.outputs.identity_principal_id }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Init - Identity
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+        run: |
+          echo "Initializing Terraform for Identity..."
+          terraform init
+
+      - name: Terraform Plan - Identity
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+        run: |
+          echo "Planning Terraform apply for Identity..."
+          terraform plan -out=apply.tfplan
+
+      - name: Terraform Apply - Identity
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+        run: |
+          echo "Executing Terraform apply for Identity..."
+          terraform apply -auto-approve apply.tfplan
+          echo "✅ Identity deployed successfully"
+
+      - name: Get Identity Outputs
+        id: terraform-output
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+        run: |
+          echo "identity_id=$(terraform output -raw identity_id)" >> $GITHUB_OUTPUT
+          echo "identity_principal_id=$(terraform output -raw identity_principal_id)" >> $GITHUB_OUTPUT
+
+  # Job 3: Desplegar Network (depende del Resource Group)
+  deploy-network:
+    name: Deploy Network
+    runs-on: ubuntu-latest
+    environment: dev
+    needs: deploy-resource-group
+    outputs:
+      vnet_id: ${{ steps.terraform-output.outputs.vnet_id }}
+      subnet_id: ${{ steps.terraform-output.outputs.subnet_id }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Init - Network
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+        run: |
+          echo "Initializing Terraform for Network..."
+          terraform init
+
+      - name: Terraform Plan - Network
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+        run: |
+          echo "Planning Terraform apply for Network..."
+          terraform plan -out=apply.tfplan
+
+      - name: Terraform Apply - Network
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+        run: |
+          echo "Executing Terraform apply for Network..."
+          terraform apply -auto-approve apply.tfplan
+          echo "✅ Network deployed successfully"
+
+      - name: Get Network Outputs
+        id: terraform-output
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+        run: |
+          echo "vnet_id=$(terraform output -raw vnet_id)" >> $GITHUB_OUTPUT
+          echo "subnet_id=$(terraform output -raw subnet_id)" >> $GITHUB_OUTPUT
+
+  # Job 4: Desplegar AKS Cluster (depende de Resource Group, Identity y Network)
+  deploy-aks:
+    name: Deploy AKS Cluster
+    runs-on: ubuntu-latest
+    environment: dev
+    needs: [deploy-resource-group, deploy-identity, deploy-network]
+    outputs:
+      aks_name: ${{ steps.terraform-output.outputs.aks_name }}
+      resource_group_name: ${{ steps.terraform-output.outputs.resource_group_name }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Init - AKS
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
+        run: |
+          echo "Initializing Terraform for AKS..."
+          terraform init
+
+      - name: Terraform Plan - AKS
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
+        run: |
+          echo "Planning Terraform apply for AKS..."
+          terraform plan -out=apply.tfplan
+
+      - name: Terraform Apply - AKS
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
+        run: |
+          echo "Executing Terraform apply for AKS..."
+          terraform apply -auto-approve apply.tfplan
+          echo "✅ AKS Cluster deployed successfully"
+
+      - name: Wait for AKS Cluster Ready
+        run: |
+          echo "Waiting for AKS cluster to be ready..."
+          
+          # Obtener el nombre del cluster y resource group desde los outputs
+          AKS_CLUSTER_NAME=$(terraform output -raw aks_name)
+          AKS_RESOURCE_GROUP=$(terraform output -raw resource_group_name)
+          
+          # Esperar hasta que el cluster esté listo (máximo 20 minutos)
+          TIMEOUT=1200
+          ELAPSED=0
+          INTERVAL=30
+          
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            echo "Checking cluster status... (${ELAPSED}s elapsed)"
+            
+            CLUSTER_STATE=$(az aks show \
+              --resource-group $AKS_RESOURCE_GROUP \
+              --name $AKS_CLUSTER_NAME \
+              --query "provisioningState" \
+              --output tsv 2>/dev/null || echo "not_found")
+            
+            if [ "$CLUSTER_STATE" = "Succeeded" ]; then
+              echo "✅ AKS Cluster is ready!"
+              break
+            elif [ "$CLUSTER_STATE" = "Failed" ]; then
+              echo "❌ AKS Cluster creation failed"
+              exit 1
+            else
+              echo "Cluster status: $CLUSTER_STATE, waiting..."
+              sleep $INTERVAL
+              ELAPSED=$((ELAPSED + INTERVAL))
+            fi
+          done
+          
+          if [ $ELAPSED -ge $TIMEOUT ]; then
+            echo "⚠️ Timeout waiting for AKS cluster to be ready"
+            exit 1
+          fi
+
+      - name: Get AKS Outputs
+        id: terraform-output
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
+        run: |
+          echo "aks_name=$(terraform output -raw aks_name)" >> $GITHUB_OUTPUT
+          echo "resource_group_name=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
+
+  # Job 5: Desplegar Ingress IP (depende del AKS Cluster)
+  deploy-ingress-ip:
+    name: Deploy Ingress IP
+    runs-on: ubuntu-latest
+    environment: dev
+    needs: deploy-aks
+    outputs:
+      ingress_public_ip: ${{ steps.terraform-output.outputs.ingress_public_ip }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Init - Ingress IP
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
+        run: |
+          echo "Initializing Terraform for Ingress IP..."
+          terraform init
+
+      - name: Terraform Plan - Ingress IP
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
+        run: |
+          echo "Planning Terraform apply for Ingress IP..."
+          terraform plan -out=apply.tfplan
+
+      - name: Terraform Apply - Ingress IP
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
+        run: |
+          echo "Executing Terraform apply for Ingress IP..."
+          terraform apply -auto-approve apply.tfplan
+          echo "✅ Ingress IP deployed successfully"
+
+      - name: Get Ingress IP Outputs
+        id: terraform-output
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
+        run: |
+          echo "ingress_public_ip=$(terraform output -raw ingress_public_ip)" >> $GITHUB_OUTPUT
+
+  # Job 6: Verificar el despliegue completo
+  verify-deployment:
+    name: Verify Complete Deployment
+    runs-on: ubuntu-latest
+    environment: dev
+    needs: [deploy-terraform-backend, deploy-resource-group, deploy-identity, deploy-network, deploy-aks, deploy-ingress-ip]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Get AKS Credentials
+        run: |
+          echo "Getting AKS cluster credentials..."
+          az aks get-credentials \
+            --resource-group ${{ needs.deploy-aks.outputs.resource_group_name }} \
+            --name ${{ needs.deploy-aks.outputs.aks_name }} \
+            --overwrite-existing
+          
+          echo "✅ AKS credentials obtained"
+
+      - name: Verify Cluster Health
+        run: |
+          echo "Verifying AKS cluster health..."
+          
+          # Verificar que los nodos estén listos
+          kubectl get nodes -o wide
+          
+          # Verificar que el cluster esté funcionando
+          kubectl cluster-info
+          
+          echo "✅ AKS cluster health verification completed"
+
+      - name: Deployment Summary
+        run: |
+          echo "=== Modular Terraform Deployment Summary ==="
+          echo "Environment: ${{ env.ENVIRONMENT }}"
+          echo "Backend Resource Group: ${{ needs.deploy-terraform-backend.outputs.resource_group_name }}"
+          echo "Backend Storage Account: ${{ needs.deploy-terraform-backend.outputs.storage_account_name }}"
+          echo "Backend Container: ${{ needs.deploy-terraform-backend.outputs.container_name }}"
+          echo "Resource Group: ${{ needs.deploy-resource-group.outputs.resource_group_name }}"
+          echo "Location: ${{ needs.deploy-resource-group.outputs.resource_group_location }}"
+          echo "Identity ID: ${{ needs.deploy-identity.outputs.identity_id }}"
+          echo "VNet ID: ${{ needs.deploy-network.outputs.vnet_id }}"
+          echo "Subnet ID: ${{ needs.deploy-network.outputs.subnet_id }}"
+          echo "AKS Name: ${{ needs.deploy-aks.outputs.aks_name }}"
+          echo "Ingress Public IP: ${{ needs.deploy-ingress-ip.outputs.ingress_public_ip }}"
+          echo "Execution Time: $(date -u)"
+          echo "Workflow Status: ${{ job.status }}"
+          echo "============================================="

@@ -1,0 +1,24 @@
+name_prefix        = "aks-demo"
+location           = "East US"
+
+vnet_cidr          = "10.0.0.0/16"
+subnet_cidr        = "10.0.1.0/24"
+
+# Autoscaler deshabilitado: se respeta node_count
+node_count         = 1
+vm_size            = "Standard_A2_v2"
+kubernetes_version = null
+
+# Redes de cluster (sin solaparse con VNet)
+service_cidr       = "10.240.0.0/16"
+dns_service_ip     = "10.240.0.10"
+
+tags = {
+  environment = "dev"
+  owner       = "juan"
+  project     = "aks-minimal"
+  managedBy   = "terraform"
+}
+
+# Agregar el config y config.yaml en /home/jcpallares/.kube
+# terraform output -raw kubeconfig_raw > ~/.kube/config y hacer un cp config config.yaml (eliminar previos)

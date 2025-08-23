@@ -1,0 +1,13 @@
+# Ejemplo de configuración para el módulo de Resource Group
+# Copia este archivo como terraform.tfvars y ajusta los valores
+
+name_prefix = "myproject"
+environment = "dev"
+location    = "East US"
+
+# Tags adicionales (opcional)
+tags = {
+  Owner       = "DevOps Team"
+  CostCenter  = "IT-001"
+  Application = "AKS Platform"
+}

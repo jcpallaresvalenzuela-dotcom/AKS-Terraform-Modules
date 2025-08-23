@@ -1,0 +1,19 @@
+# Ejemplo de configuración para el módulo de Network
+# Copia este archivo como terraform.tfvars y ajusta los valores
+
+name_prefix = "myproject"
+environment = "dev"
+
+# Configuración de red. Ej.
+vnet_cidr   = "10.0.0.0/16"
+subnet_cidr = "10.0.1.0/24"
+
+# El resource_group_name y location se obtienen del estado remoto del módulo resource-group
+# No es necesario configurarlos aquí
+
+# Tags adicionales (opcional)
+tags = {
+  Owner       = "DevOps Team"
+  CostCenter  = "IT-001"
+  Application = "AKS Platform"
+}

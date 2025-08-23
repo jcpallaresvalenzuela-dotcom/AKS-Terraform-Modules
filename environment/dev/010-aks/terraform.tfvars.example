@@ -1,0 +1,26 @@
+# Ejemplo de configuración para el módulo de AKS
+# Copia este archivo como terraform.tfvars y ajusta los valores
+
+name_prefix = "myproject"
+environment = "dev"
+location    = "East US"
+
+# Configuración de red (se obtienen del estado remoto del módulo network)
+vnet_cidr   = "10.0.0.0/16"
+subnet_cidr = "10.0.1.0/24"
+
+# Configuración del cluster AKS
+node_count          = 1
+vm_size             = "Standard_A2_v2"
+kubernetes_version  = null  # Dejar null para que Azure elija la versión
+
+# Configuración de red del cluster
+service_cidr   = "10.240.0.0/16"
+dns_service_ip = "10.240.0.10"
+
+# Tags adicionales (opcional)
+tags = {
+  Owner       = "DevOps Team"
+  CostCenter  = "IT-001"
+  Application = "AKS Platform"
+}

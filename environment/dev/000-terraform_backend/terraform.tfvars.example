@@ -1,0 +1,24 @@
+# Configuración del Backend de Terraform
+# Copia este archivo como terraform.tfvars y ajusta los valores
+
+# Nombre del Resource Group para el estado de Terraform
+resource_group_name = "terraform-state-rg"
+
+# Entorno de despliegue
+environment = "dev"
+
+# Región donde se creará la infraestructura del backend
+location = "East US"
+
+# Nombre del Storage Account (debe ser único globalmente en Azure)
+storage_account_name = "tfstatedev"
+
+# Nombre del container para los archivos de estado
+container_name = "tfstate"
+
+# Tags adicionales (opcional)
+tags = {
+  Owner       = "DevOps Team"
+  CostCenter  = "IT-001"
+  Application = "AKS Platform"
+}

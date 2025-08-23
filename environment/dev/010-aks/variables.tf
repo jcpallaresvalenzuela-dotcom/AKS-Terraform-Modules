@@ -4,12 +4,18 @@ variable "name_prefix" {
   sensitive   = true
 }
 
-variable "location" {
+variable "environment" {
+  description = "Entorno de despliegue (dev, pre, pro)."
+  type        = string
+  default     = "dev"
+}
+
+/* variable "location" {
   description = "Región de Azure."
   type        = string
   default     = "East US"
   sensitive   = true
-}
+} */
 
 variable "vnet_cidr" {
   description = "CIDR para la VNet."
@@ -50,8 +56,8 @@ variable "tags" {
   description = "Etiquetas comunes."
   type        = map(string)
   default     = {
-    environment = "dev"
-    managedBy   = "terraform"
+    managedBy = "terraform"
+    Project   = "aks-terraform"
   }
 }
 

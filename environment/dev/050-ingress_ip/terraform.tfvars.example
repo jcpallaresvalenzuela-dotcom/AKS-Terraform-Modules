@@ -1,0 +1,5 @@
+# Ejemplo de configuración para el módulo de Ingress IP
+# Copia este archivo como terraform.tfvars y ajusta los valores
+
+name_prefix = "myproject"
+environment = "dev"

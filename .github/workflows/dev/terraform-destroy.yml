@@ -1,18 +1,21 @@
-name: Terraform Destroy AKS Cluster
+name: Terraform Destroy AKS Cluster - Modular Destruction
 
 on:
   # Ejecución manual desde la interfaz de GitHub
   workflow_dispatch:
 
 env:
-  AKS_NAME: ${{ secrets.AKS_NAME }}
-  RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
+  ENVIRONMENT: "dev"
+  TERRAFORM_VERSION: "1.6.0"
 
 jobs:
-  destroy-aks-cluster:
-    name: Destroy AKS Cluster with Terraform
+  # Job 1: Destruir Ingress IP (depende de AKS)
+  destroy-ingress-ip:
+    name: Destroy Ingress IP
     runs-on: ubuntu-latest
     environment: dev
+    outputs:
+      ingress_destroyed: ${{ steps.destroy-status.outputs.status }}
     
     steps:
       - name: Checkout code
@@ -26,86 +29,330 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "1.6.0"
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Check AKS Cluster Status
-        id: check-status
+      - name: Check Ingress IP Status
+        id: check-ingress
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
         run: |
-          echo "Checking status of AKS cluster: $AKS_NAME"
+          echo "Checking if Ingress IP module exists..."
           
-          # Obtener el estado del cluster
-          CLUSTER_STATUS=$(az aks show \
-            --resource-group $RESOURCE_GROUP \
-            --name $AKS_NAME \
-            --query "powerState.code" \
-            --output tsv 2>/dev/null || echo "not_found")
-          
-          echo "Cluster status: $CLUSTER_STATUS"
-          
-          if [ "$CLUSTER_STATUS" = "not_found" ]; then
-            echo "Cluster not found, nothing to destroy"
-            echo "status=not_found" >> $GITHUB_OUTPUT
-          elif [ "$CLUSTER_STATUS" = "Running" ]; then
-            echo "Cluster is running, will destroy it"
-            echo "status=running" >> $GITHUB_OUTPUT
-          elif [ "$CLUSTER_STATUS" = "Stopped" ]; then
-            echo "Cluster is stopped, will destroy it"
-            echo "status=stopped" >> $GITHUB_OUTPUT
+          if [ -f "main.tf" ]; then
+            echo "Ingress IP module found, will destroy it"
+            echo "exists=true" >> $GITHUB_OUTPUT
           else
-            echo "Unknown cluster status: $CLUSTER_STATUS"
-            echo "status=unknown" >> $GITHUB_OUTPUT
+            echo "Ingress IP module not found"
+            echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Auto-Confirm Destruction
-        if: steps.check-status.outputs.status != 'not_found'
+      - name: Terraform Init - Ingress IP
+        if: steps.check-ingress.outputs.exists == 'true'
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
         run: |
-          echo "✅ Destrucción automáticamente confirmada. Procediendo con Terraform destroy..."
-
-      - name: Terraform Init
-        if: steps.check-status.outputs.status != 'not_found'
-        working-directory: ./
-        run: |
-          echo "Initializing Terraform..."
+          echo "Initializing Terraform for Ingress IP destruction..."
           terraform init
 
-      - name: Terraform Destroy
-        if: steps.check-status.outputs.status != 'not_found'
-        working-directory: ./
+      - name: Terraform Destroy - Ingress IP
+        if: steps.check-ingress.outputs.exists == 'true'
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
         run: |
-          echo "Planning Terraform destroy..."
+          echo "Destroying Ingress IP infrastructure..."
           terraform destroy -auto-approve
-          
-          echo "✅ Terraform destroy completed successfully"
+          echo "✅ Ingress IP destroyed successfully"
 
-      - name: Verify Destruction
-        if: steps.check-status.outputs.status != 'not_found'
+      - name: Set Destroy Status
+        id: destroy-status
         run: |
-          echo "Verifying cluster destruction..."
-          
-          # Esperar un poco para que Azure procese la eliminación
-          sleep 30
-          
-          # Verificar que el cluster ya no existe
-          if az aks show \
-            --resource-group $RESOURCE_GROUP \
-            --name $AKS_NAME \
-            --query "name" \
-            --output tsv 2>/dev/null; then
-            echo "⚠️ Cluster still exists, may take longer to destroy"
+          if [ "${{ steps.check-ingress.outputs.exists }}" == "true" ]; then
+            echo "status=destroyed" >> $GITHUB_OUTPUT
           else
-            echo "✅ Cluster successfully destroyed"
+            echo "status=skipped" >> $GITHUB_OUTPUT
           fi
 
-      - name: Skip Destroy (No Cluster)
-        if: steps.check-status.outputs.status == 'not_found'
-        run: |
-          echo "✅ No AKS cluster found to destroy. Nothing to do."
+  # Job 2: Destruir AKS Cluster (depende de Network e Identity)
+  destroy-aks:
+    name: Destroy AKS Cluster
+    runs-on: ubuntu-latest
+    environment: dev
+    needs: destroy-ingress-ip
+    outputs:
+      aks_destroyed: ${{ steps.destroy-status.outputs.status }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Summary
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Check AKS Module Status
+        id: check-aks
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
         run: |
-          echo "=== Terraform Destroy Workflow Summary ==="
-          echo "Cluster Name: $AKS_NAME"
-          echo "Resource Group: $RESOURCE_GROUP"
+          echo "Checking if AKS module exists..."
+          
+          if [ -f "main.tf" ]; then
+            echo "AKS module found, will destroy it"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "AKS module not found"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Init - AKS
+        if: steps.check-aks.outputs.exists == 'true'
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
+        run: |
+          echo "Initializing Terraform for AKS destruction..."
+          terraform init
+
+      - name: Terraform Destroy - AKS
+        if: steps.check-aks.outputs.exists == 'true'
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
+        run: |
+          echo "Destroying AKS cluster infrastructure..."
+          terraform destroy -auto-approve
+          echo "✅ AKS cluster destroyed successfully"
+
+      - name: Wait for AKS Destruction
+        if: steps.check-aks.outputs.exists == 'true'
+        run: |
+          echo "Waiting for AKS cluster to be fully destroyed..."
+          sleep 60
+          echo "✅ Wait completed"
+
+      - name: Set Destroy Status
+        id: destroy-status
+        run: |
+          if [ "${{ steps.check-aks.outputs.exists }}" == "true" ]; then
+            echo "status=destroyed" >> $GITHUB_OUTPUT
+          else
+            echo "status=skipped" >> $GITHUB_OUTPUT
+          fi
+
+  # Job 3: Destruir Network (depende de Resource Group)
+  destroy-network:
+    name: Destroy Network Infrastructure
+    runs-on: ubuntu-latest
+    environment: dev
+    needs: destroy-aks
+    outputs:
+      network_destroyed: ${{ steps.destroy-status.outputs.status }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Check Network Module Status
+        id: check-network
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+        run: |
+          echo "Checking if Network module exists..."
+          
+          if [ -f "main.tf" ]; then
+            echo "Network module found, will destroy it"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Network module not found"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Init - Network
+        if: steps.check-network.outputs.exists == 'true'
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+        run: |
+          echo "Initializing Terraform for Network destruction..."
+          terraform init
+
+      - name: Terraform Destroy - Network
+        if: steps.check-network.outputs.exists == 'true'
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+        run: |
+          echo "Destroying Network infrastructure..."
+          terraform destroy -auto-approve
+          echo "✅ Network infrastructure destroyed successfully"
+
+      - name: Set Destroy Status
+        id: destroy-status
+        run: |
+          if [ "${{ steps.check-network.outputs.exists }}" == "true" ]; then
+            echo "status=destroyed" >> $GITHUB_OUTPUT
+          else
+            echo "status=skipped" >> $GITHUB_OUTPUT
+          fi
+
+  # Job 4: Destruir Identity (depende de Resource Group)
+  destroy-identity:
+    name: Destroy Identity Infrastructure
+    runs-on: ubuntu-latest
+    environment: dev
+    needs: destroy-aks
+    outputs:
+      identity_destroyed: ${{ steps.destroy-status.outputs.status }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Check Identity Module Status
+        id: check-identity
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+        run: |
+          echo "Checking if Identity module exists..."
+          
+          if [ -f "main.tf" ]; then
+            echo "Identity module found, will destroy it"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Identity module not found"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Init - Identity
+        if: steps.check-identity.outputs.exists == 'true'
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+        run: |
+          echo "Initializing Terraform for Identity destruction..."
+          terraform init
+
+      - name: Terraform Destroy - Identity
+        if: steps.check-identity.outputs.exists == 'true'
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+        run: |
+          echo "Destroying Identity infrastructure..."
+          terraform destroy -auto-approve
+          echo "✅ Identity infrastructure destroyed successfully"
+
+      - name: Set Destroy Status
+        id: destroy-status
+        run: |
+          if [ "${{ steps.check-identity.outputs.exists }}" == "true" ]; then
+            echo "status=destroyed" >> $GITHUB_OUTPUT
+          else
+            echo "status=skipped" >> $GITHUB_OUTPUT
+          fi
+
+  # Job 5: Destruir Resource Group (base para todos)
+  destroy-resource-group:
+    name: Destroy Resource Group
+    runs-on: ubuntu-latest
+    environment: dev
+    needs: [destroy-network, destroy-identity]
+    outputs:
+      resource_group_destroyed: ${{ steps.destroy-status.outputs.status }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Check Resource Group Module Status
+        id: check-rg
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+        run: |
+          echo "Checking if Resource Group module exists..."
+          
+          if [ -f "main.tf" ]; then
+            echo "Resource Group module found, will destroy it"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Resource Group module not found"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Init - Resource Group
+        if: steps.check-rg.outputs.exists == 'true'
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+        run: |
+          echo "Initializing Terraform for Resource Group destruction..."
+          terraform init
+
+      - name: Terraform Destroy - Resource Group
+        if: steps.check-rg.outputs.exists == 'true'
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+        run: |
+          echo "Destroying Resource Group infrastructure..."
+          terraform destroy -auto-approve
+          echo "✅ Resource Group infrastructure destroyed successfully"
+
+      - name: Set Destroy Status
+        id: destroy-status
+        run: |
+          if [ "${{ steps.check-rg.outputs.exists }}" == "true" ]; then
+            echo "status=destroyed" >> $GITHUB_OUTPUT
+          else
+            echo "status=skipped" >> $GITHUB_OUTPUT
+          fi
+
+  # Job 6: Verificación final y limpieza
+  verify-destruction:
+    name: Verify Complete Destruction
+    runs-on: ubuntu-latest
+    environment: dev
+    needs: [destroy-ingress-ip, destroy-aks, destroy-network, destroy-identity, destroy-resource-group]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Final Verification
+        run: |
+          echo "=== Final Destruction Verification ==="
+          
+          # Verificar que no quedan recursos huérfanos
+          echo "Checking for orphaned resources..."
+          
+          # Listar resource groups que puedan contener recursos del cluster
+          echo "Resource Groups remaining:"
+          az group list --query "[?contains(name, 'myproject') || contains(name, 'MC_')].{Name:name,Location:location}" -o table
+          
+          echo "=== Destruction Summary ==="
+          echo "Ingress IP: ${{ needs.destroy-ingress-ip.outputs.ingress_destroyed }}"
+          echo "AKS Cluster: ${{ needs.destroy-aks.outputs.aks_destroyed }}"
+          echo "Network: ${{ needs.destroy-network.outputs.network_destroyed }}"
+          echo "Identity: ${{ needs.destroy-identity.outputs.identity_destroyed }}"
+          echo "Resource Group: ${{ needs.destroy-resource-group.outputs.resource_group_destroyed }}"
           echo "Execution Time: $(date -u)"
           echo "Workflow Status: ${{ job.status }}"
-          echo "========================================"
+          echo "====================================="

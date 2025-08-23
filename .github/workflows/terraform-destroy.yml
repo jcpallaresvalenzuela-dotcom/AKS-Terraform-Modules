@@ -65,6 +65,10 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           ARM_USE_OIDC: true
           ARM_ACCESS_KEY: ${{ secrets.AZURE_STORAGE_ACCESS_KEY }}
+          TF_LOG: TRACE
+          TF_LOG_PATH: terraform.log
+          TERRAFORM_COLOR: true
+          FORCE_COLOR: 1
         run: |
           echo "Destroying Ingress IP infrastructure..."
           terraform destroy -auto-approve

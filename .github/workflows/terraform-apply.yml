@@ -1,4 +1,4 @@
-name: Terraform Apply AKS Cluster - Modular Construction with Customizable Naming and Tags
+name: Terraform Apply AKS Cluster - Modular Construction
 
 on:
   workflow_dispatch:
@@ -7,21 +7,6 @@ on:
         description: 'Environment to deploy (dev, pre, pro)'
         required: true
         default: 'dev'
-        type: string
-      name_prefix:
-        description: 'Name prefix for all resources (e.g., "myproject" will create rg-myproject-dev, aks-myproject-dev, etc.)'
-        required: true
-        default: 'myproject'
-        type: string
-      override_variables:
-        description: 'Override specific variables (JSON format, e.g., {"resource_group_name": "rg-custom", "location": "East US"})'
-        required: false
-        default: '{}'
-        type: string
-      tags:
-        description: 'Tags to apply to all resources (JSON format, e.g., {"Owner": "jcpallares", "Application": "AKS Platform", "Environment": "dev"})'
-        required: false
-        default: '{"Owner": "jcpallares", "Application": "AKS Platform"}'
         type: string
       confirm_deployment:
         description: 'Confirm that you want to deploy this environment'
@@ -70,48 +55,6 @@ jobs:
           echo "✅ Environment validation passed"
           echo "status=validated" >> $GITHUB_OUTPUT
 
-      - name: Validate Override Variables
-        run: |
-          echo "=== Override Variables Validation ==="
-          OVERRIDE_VARS='${{ github.event.inputs.override_variables }}'
-          
-          if [ "$OVERRIDE_VARS" != "{}" ]; then
-            echo "Override variables provided: $OVERRIDE_VARS"
-            
-            # Validar que sea JSON válido
-            if echo "$OVERRIDE_VARS" | jq empty 2>/dev/null; then
-              echo "✅ Override variables JSON is valid"
-              echo "Parsed variables:"
-              echo "$OVERRIDE_VARS" | jq -r 'to_entries[] | "  \(.key) = \(.value)"'
-            else
-              echo "❌ Invalid JSON format in override variables"
-              exit 1
-            fi
-          else
-            echo "ℹ️ No override variables provided, using environment defaults"
-          fi
-
-      - name: Validate Tags
-        run: |
-          echo "=== Tags Validation ==="
-          TAGS='${{ github.event.inputs.tags }}'
-          
-          if [ "$TAGS" != "{}" ]; then
-            echo "Tags provided: $TAGS"
-            
-            # Validar que sea JSON válido
-            if echo "$TAGS" | jq empty 2>/dev/null; then
-              echo "✅ Tags JSON is valid"
-              echo "Parsed tags:"
-              echo "$TAGS" | jq -r 'to_entries[] | "  \(.key) = \(.value)"'
-            else
-              echo "❌ Invalid JSON format in tags"
-              exit 1
-            fi
-          else
-            echo "ℹ️ No tags provided, using defaults"
-          fi
-
   # Job 1: Crear Resource Group (base para todos)
   create-resource-group:
     name: Create Resource Group
@@ -143,46 +86,6 @@ jobs:
             echo "Resource Group module not found"
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
-
-      - name: Prepare Terraform Variables - Resource Group
-        if: steps.check-rg.outputs.exists == 'true'
-        working-directory: ./environment/${{ github.event.inputs.environment }}/020-resource_group
-        run: |
-          echo "=== Preparing Terraform Variables for Resource Group ==="
-          
-          # Copiar tfvars base del environment
-          if [ -f "terraform.tfvars.${{ github.event.inputs.environment }}" ]; then
-            cp "terraform.tfvars.${{ github.event.inputs.environment }}" terraform.tfvars
-            echo "✅ Using environment-specific tfvars: terraform.tfvars.${{ github.event.inputs.environment }}"
-          elif [ -f "terraform.tfvars.example" ]; then
-            cp terraform.tfvars.example terraform.tfvars
-            echo "✅ Using example tfvars as base"
-          else
-            echo "⚠️ No tfvars found, using defaults"
-            touch terraform.tfvars
-          fi
-          
-          # Aplicar name_prefix
-          echo "name_prefix = \"${{ github.event.inputs.name_prefix }}\"" >> terraform.tfvars
-          
-          # Aplicar tags
-          TAGS='${{ github.event.inputs.tags }}'
-          if [ "$TAGS" != "{}" ]; then
-            echo "Applying tags..."
-            echo "tags = {" >> terraform.tfvars
-            echo "$TAGS" | jq -r 'to_entries[] | "  \(.key) = \"\(.value)\""' >> terraform.tfvars
-            echo "}" >> terraform.tfvars
-          fi
-          
-          # Aplicar overrides si se especifican
-          OVERRIDE_VARS='${{ github.event.inputs.override_variables }}'
-          if [ "$OVERRIDE_VARS" != "{}" ]; then
-            echo "Applying variable overrides..."
-            echo "$OVERRIDE_VARS" | jq -r 'to_entries[] | "\(.key) = \"\(.value)\""' >> terraform.tfvars
-          fi
-          
-          echo "Final terraform.tfvars for Resource Group:"
-          cat terraform.tfvars
 
       - name: Terraform Init - Resource Group
         if: steps.check-rg.outputs.exists == 'true'
@@ -263,46 +166,6 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Prepare Terraform Variables - Identity
-        if: steps.check-identity.outputs.exists == 'true'
-        working-directory: ./environment/${{ github.event.inputs.environment }}/030-identity
-        run: |
-          echo "=== Preparing Terraform Variables for Identity ==="
-          
-          # Copiar tfvars base del environment
-          if [ -f "terraform.tfvars.${{ github.event.inputs.environment }}" ]; then
-            cp "terraform.tfvars.${{ github.event.inputs.environment }}" terraform.tfvars
-            echo "✅ Using environment-specific tfvars: terraform.tfvars.${{ github.event.inputs.environment }}"
-          elif [ -f "terraform.tfvars.example" ]; then
-            cp terraform.tfvars.example terraform.tfvars
-            echo "✅ Using example tfvars as base"
-          else
-            echo "⚠️ No tfvars found, using defaults"
-            touch terraform.tfvars
-          fi
-          
-          # Aplicar name_prefix
-          echo "name_prefix = \"${{ github.event.inputs.name_prefix }}\"" >> terraform.tfvars
-          
-          # Aplicar tags
-          TAGS='${{ github.event.inputs.tags }}'
-          if [ "$TAGS" != "{}" ]; then
-            echo "Applying tags..."
-            echo "tags = {" >> terraform.tfvars
-            echo "$TAGS" | jq -r 'to_entries[] | "  \(.key) = \"\(.value)\""' >> terraform.tfvars
-            echo "}" >> terraform.tfvars
-          fi
-          
-          # Aplicar overrides si se especifican
-          OVERRIDE_VARS='${{ github.event.inputs.override_variables }}'
-          if [ "$OVERRIDE_VARS" != "{}" ]; then
-            echo "Applying variable overrides..."
-            echo "$OVERRIDE_VARS" | jq -r 'to_entries[] | "\(.key) = \"\(.value)\""' >> terraform.tfvars
-          fi
-          
-          echo "Final terraform.tfvars for Identity:"
-          cat terraform.tfvars
-
       - name: Terraform Init - Identity
         if: steps.check-identity.outputs.exists == 'true'
         working-directory: ./environment/${{ github.event.inputs.environment }}/030-identity
@@ -382,43 +245,6 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Prepare Terraform Variables - Network
-        if: steps.check-network.outputs.exists == 'true'
-        working-directory: ./environment/${{ github.event.inputs.environment }}/040-network
-        run: |
-          echo "=== Preparing Terraform Variables for Network ==="
-          
-          # Copiar tfvars base del environment
-          if [ -f "terraform.tfvars.${{ github.event.inputs.environment }}" ]; then
-            cp "terraform.tfvars.${{ github.event.inputs.environment }}" terraform.tfvars
-            echo "✅ Using environment-specific tfvars: terraform.tfvars.${{ github.event.inputs.environment }}"
-          elif [ -f "terraform.tfvars.example" ]; then
-            cp terraform.tfvars.example terraform.tfvars
-            echo "✅ Using example tfvars as base"
-          fi
-          
-          # Aplicar name_prefix
-          echo "name_prefix = \"${{ github.event.inputs.name_prefix }}\"" >> terraform.tfvars
-          
-          # Aplicar tags
-          TAGS='${{ github.event.inputs.tags }}'
-          if [ "$TAGS" != "{}" ]; then
-            echo "Applying tags..."
-            echo "tags = {" >> terraform.tfvars
-            echo "$TAGS" | jq -r 'to_entries[] | "  \(.key) = \"\(.value)\""' >> terraform.tfvars
-            echo "}" >> terraform.tfvars
-          fi
-          
-          # Aplicar overrides si se especifican
-          OVERRIDE_VARS='${{ github.event.inputs.override_variables }}'
-          if [ "$OVERRIDE_VARS" != "{}" ]; then
-            echo "Applying variable overrides..."
-            echo "$OVERRIDE_VARS" | jq -r 'to_entries[] | "\(.key) = \"\(.value)\""' >> terraform.tfvars
-          fi
-          
-          echo "Final terraform.tfvars for Network:"
-          cat terraform.tfvars
-
       - name: Terraform Init - Network
         if: steps.check-network.outputs.exists == 'true'
         working-directory: ./environment/${{ github.event.inputs.environment }}/040-network
@@ -497,46 +323,6 @@ jobs:
             echo "AKS module not found"
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
-
-      - name: Prepare Terraform Variables - AKS
-        if: steps.check-aks.outputs.exists == 'true'
-        working-directory: ./environment/${{ github.event.inputs.environment }}/010-aks
-        run: |
-          echo "=== Preparing Terraform Variables for AKS ==="
-          
-          # Copiar tfvars base del environment
-          if [ -f "terraform.tfvars.${{ github.event.inputs.environment }}" ]; then
-            cp "terraform.tfvars.${{ github.event.inputs.environment }}" terraform.tfvars
-            echo "✅ Using environment-specific tfvars: terraform.tfvars.${{ github.event.inputs.environment }}"
-          elif [ -f "terraform.tfvars.example" ]; then
-            cp terraform.tfvars.example terraform.tfvars
-            echo "✅ Using example tfvars as base"
-          else
-            echo "⚠️ No tfvars found, using defaults"
-            touch terraform.tfvars
-          fi
-          
-          # Aplicar name_prefix
-          echo "name_prefix = \"${{ github.event.inputs.name_prefix }}\"" >> terraform.tfvars
-          
-          # Aplicar tags
-          TAGS='${{ github.event.inputs.tags }}'
-          if [ "$TAGS" != "{}" ]; then
-            echo "Applying tags..."
-            echo "tags = {" >> terraform.tfvars
-            echo "$TAGS" | jq -r 'to_entries[] | "  \(.key) = \"\(.value)\""' >> terraform.tfvars
-            echo "}" >> terraform.tfvars
-          fi
-          
-          # Aplicar overrides si se especifican
-          OVERRIDE_VARS='${{ github.event.inputs.override_variables }}'
-          if [ "$OVERRIDE_VARS" != "{}" ]; then
-            echo "Applying variable overrides..."
-            echo "$OVERRIDE_VARS" | jq -r 'to_entries[] | "\(.key) = \"\(.value)\""' >> terraform.tfvars
-          fi
-          
-          echo "Final terraform.tfvars for AKS:"
-          cat terraform.tfvars
 
       - name: Terraform Init - AKS
         if: steps.check-aks.outputs.exists == 'true'
@@ -624,46 +410,6 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Prepare Terraform Variables - Ingress IP
-        if: steps.check-ingress.outputs.exists == 'true'
-        working-directory: ./environment/${{ github.event.inputs.environment }}/050-ingress_ip
-        run: |
-          echo "=== Preparing Terraform Variables for Ingress IP ==="
-          
-          # Copiar tfvars base del environment
-          if [ -f "terraform.tfvars.${{ github.event.inputs.environment }}" ]; then
-            cp "terraform.tfvars.${{ github.event.inputs.environment }}" terraform.tfvars
-            echo "✅ Using environment-specific tfvars: terraform.tfvars.${{ github.event.inputs.environment }}"
-          elif [ -f "terraform.tfvars.example" ]; then
-            cp terraform.tfvars.example terraform.tfvars
-            echo "✅ Using example tfvars as base"
-          else
-            echo "⚠️ No tfvars found, using defaults"
-            touch terraform.tfvars
-          fi
-          
-          # Aplicar name_prefix
-          echo "name_prefix = \"${{ github.event.inputs.name_prefix }}\"" >> terraform.tfvars
-          
-          # Aplicar tags
-          TAGS='${{ github.event.inputs.tags }}'
-          if [ "$TAGS" != "{}" ]; then
-            echo "Applying tags..."
-            echo "tags = {" >> terraform.tfvars
-            echo "$TAGS" | jq -r 'to_entries[] | "  \(.key) = \"\(.value)\""' >> terraform.tfvars
-            echo "}" >> terraform.tfvars
-          fi
-          
-          # Aplicar overrides si se especifican
-          OVERRIDE_VARS='${{ github.event.inputs.override_variables }}'
-          if [ "$OVERRIDE_VARS" != "{}" ]; then
-            echo "Applying variable overrides..."
-            echo "$OVERRIDE_VARS" | jq -r 'to_entries[] | "\(.key) = \"\(.value)\""' >> terraform.tfvars
-          fi
-          
-          echo "Final terraform.tfvars for Ingress IP:"
-          cat terraform.tfvars
-
       - name: Terraform Init - Ingress IP
         if: steps.check-ingress.outputs.exists == 'true'
         working-directory: ./environment/${{ github.event.inputs.environment }}/050-ingress_ip
@@ -739,7 +485,7 @@ jobs:
           
           # Listar resource groups para verificar que existen
           echo "Resource Groups created:"
-          az group list --query "[?contains(name, 'myproject') || contains(name, 'MC_')].{Name:name,Location:location,ProvisioningState:provisioningState}" -o table
+          az group list --query "[].{Name:name,Location:location,ProvisioningState:provisioningState}" -o table
           
           # Verificar estado de AKS si existe
           echo "AKS Clusters:"

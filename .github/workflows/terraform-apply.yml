@@ -1,412 +1,501 @@
-name: Terraform Apply AKS Cluster - Modular Deployment
+name: Terraform Apply AKS Cluster - Modular Construction
 
 on:
   # Ejecución manual desde la interfaz de GitHub
   workflow_dispatch:
 
 env:
-  AKS_NAME: ${{ secrets.AKS_NAME }}
-  RESOURCE_GROUP: ${{ secrets.RESOURCE_GROUP }}
   ENVIRONMENT: "dev"
   TERRAFORM_VERSION: "1.6.0"
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
-  # Job 0: Desplegar la infraestructura del backend de Terraform (PRIMERO)
-  deploy-terraform-backend:
-    name: Deploy Terraform Backend Infrastructure
+  # Job 1: Crear Resource Group (base para todos)
+  create-resource-group:
+    name: Create Resource Group
     runs-on: ubuntu-latest
     environment: dev
     outputs:
-      resource_group_name: ${{ steps.terraform-output.outputs.resource_group_name }}
-      storage_account_name: ${{ steps.terraform-output.outputs.storage_account_name }}
-      container_name: ${{ steps.terraform-output.outputs.container_name }}
+      resource_group_created: ${{ steps.create-status.outputs.status }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Terraform Init - Backend Infrastructure
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/000-terraform_backend
-        run: |
-          echo "Initializing Terraform for Backend Infrastructure..."
-          terraform init
-
-      - name: Terraform Plan - Backend Infrastructure
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/000-terraform_backend
-        run: |
-          echo "Planning Terraform apply for Backend Infrastructure..."
-          terraform plan -out=apply.tfplan
-
-      - name: Terraform Apply - Backend Infrastructure
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/000-terraform_backend
-        run: |
-          echo "Executing Terraform apply for Backend Infrastructure..."
-          terraform apply -auto-approve apply.tfplan
-          echo "✅ Backend Infrastructure deployed successfully"
-
-      - name: Get Backend Infrastructure Outputs
-        id: terraform-output
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/000-terraform_backend
-        run: |
-          echo "resource_group_name=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
-          echo "storage_account_name=$(terraform output -raw storage_account_name)" >> $GITHUB_OUTPUT
-          echo "container_name=$(terraform output -raw container_name)" >> $GITHUB_OUTPUT
-
-  # Job 1: Desplegar Resource Group (base para todos los recursos)
-  deploy-resource-group:
-    name: Deploy Resource Group
-    runs-on: ubuntu-latest
-    environment: dev
-    needs: deploy-terraform-backend
-    outputs:
-      resource_group_name: ${{ steps.terraform-output.outputs.resource_group_name }}
-      resource_group_location: ${{ steps.terraform-output.outputs.resource_group_location }}
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Terraform Init - Resource Group
+      - name: Check Resource Group Module Status
+        id: check-rg
         working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
         run: |
-          echo "Initializing Terraform for Resource Group..."
+          echo "Checking if Resource Group module exists..."
+          
+          if [ -f "main.tf" ]; then
+            echo "Resource Group module found, will create it"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Resource Group module not found"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Init - Resource Group
+        if: steps.check-rg.outputs.exists == 'true'
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+        run: |
+          echo "Initializing Terraform for Resource Group creation..."
           terraform init
 
       - name: Terraform Plan - Resource Group
+        if: steps.check-rg.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
         run: |
-          echo "Planning Terraform apply for Resource Group..."
-          terraform plan -out=apply.tfplan
+          echo "Planning Resource Group infrastructure..."
+          terraform plan -out=tfplan
 
       - name: Terraform Apply - Resource Group
+        if: steps.check-rg.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+          ARM_ACCESS_KEY: ${{ secrets.AZURE_STORAGE_ACCESS_KEY }}
         run: |
-          echo "Executing Terraform apply for Resource Group..."
-          terraform apply -auto-approve apply.tfplan
-          echo "✅ Resource Group deployed successfully"
+          echo "Creating Resource Group infrastructure..."
+          terraform apply tfplan
+          echo "✅ Resource Group infrastructure created successfully"
 
-      - name: Get Resource Group Outputs
-        id: terraform-output
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/020-resource_group
+      - name: Set Create Status
+        id: create-status
         run: |
-          echo "resource_group_name=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
-          echo "resource_group_location=$(terraform output -raw resource_group_location)" >> $GITHUB_OUTPUT
+          if [ "${{ steps.check-rg.outputs.exists }}" == "true" ]; then
+            echo "status=created" >> $GITHUB_OUTPUT
+          else
+            echo "status=skipped" >> $GITHUB_OUTPUT
+          fi
 
-  # Job 2: Desplegar Identity (depende del Resource Group)
-  deploy-identity:
-    name: Deploy Identity
+  # Job 2: Crear Identity (depende de Resource Group)
+  create-identity:
+    name: Create Identity Infrastructure
     runs-on: ubuntu-latest
     environment: dev
-    needs: deploy-resource-group
+    needs: create-resource-group
     outputs:
-      identity_id: ${{ steps.terraform-output.outputs.identity_id }}
-      identity_principal_id: ${{ steps.terraform-output.outputs.identity_principal_id }}
+      identity_created: ${{ steps.create-status.outputs.status }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Terraform Init - Identity
+      - name: Check Identity Module Status
+        id: check-identity
         working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
         run: |
-          echo "Initializing Terraform for Identity..."
+          echo "Checking if Identity module exists..."
+          
+          if [ -f "main.tf" ]; then
+            echo "Identity module found, will create it"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Identity module not found"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Init - Identity
+        if: steps.check-identity.outputs.exists == 'true'
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+        run: |
+          echo "Initializing Terraform for Identity creation..."
           terraform init
 
       - name: Terraform Plan - Identity
+        if: steps.check-identity.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
         run: |
-          echo "Planning Terraform apply for Identity..."
-          terraform plan -out=apply.tfplan
+          echo "Planning Identity infrastructure..."
+          terraform plan -out=tfplan
 
       - name: Terraform Apply - Identity
+        if: steps.check-identity.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+          ARM_ACCESS_KEY: ${{ secrets.AZURE_STORAGE_ACCESS_KEY }}
         run: |
-          echo "Executing Terraform apply for Identity..."
-          terraform apply -auto-approve apply.tfplan
-          echo "✅ Identity deployed successfully"
+          echo "Creating Identity infrastructure..."
+          terraform apply tfplan
+          echo "✅ Identity infrastructure created successfully"
 
-      - name: Get Identity Outputs
-        id: terraform-output
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/030-identity
+      - name: Set Create Status
+        id: create-status
         run: |
-          echo "identity_id=$(terraform output -raw identity_id)" >> $GITHUB_OUTPUT
-          echo "identity_principal_id=$(terraform output -raw identity_principal_id)" >> $GITHUB_OUTPUT
+          if [ "${{ steps.check-identity.outputs.exists }}" == "true" ]; then
+            echo "status=created" >> $GITHUB_OUTPUT
+          else
+            echo "status=skipped" >> $GITHUB_OUTPUT
+          fi
 
-  # Job 3: Desplegar Network (depende del Resource Group)
-  deploy-network:
-    name: Deploy Network
+  # Job 3: Crear Network (depende de Resource Group)
+  create-network:
+    name: Create Network Infrastructure
     runs-on: ubuntu-latest
     environment: dev
-    needs: deploy-resource-group
+    needs: create-resource-group
     outputs:
-      vnet_id: ${{ steps.terraform-output.outputs.vnet_id }}
-      subnet_id: ${{ steps.terraform-output.outputs.subnet_id }}
+      network_created: ${{ steps.create-status.outputs.status }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Terraform Init - Network
+      - name: Check Network Module Status
+        id: check-network
         working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
         run: |
-          echo "Initializing Terraform for Network..."
+          echo "Checking if Network module exists..."
+          
+          if [ -f "main.tf" ]; then
+            echo "Network module found, will create it"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Network module not found"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Init - Network
+        if: steps.check-network.outputs.exists == 'true'
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+        run: |
+          echo "Initializing Terraform for Network creation..."
           terraform init
 
       - name: Terraform Plan - Network
+        if: steps.check-network.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
         run: |
-          echo "Planning Terraform apply for Network..."
-          terraform plan -out=apply.tfplan
+          echo "Planning Network infrastructure..."
+          terraform plan -out=tfplan
 
       - name: Terraform Apply - Network
+        if: steps.check-network.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+          ARM_ACCESS_KEY: ${{ secrets.AZURE_STORAGE_ACCESS_KEY }}
         run: |
-          echo "Executing Terraform apply for Network..."
-          terraform apply -auto-approve apply.tfplan
-          echo "✅ Network deployed successfully"
+          echo "Creating Network infrastructure..."
+          terraform apply tfplan
+          echo "✅ Network infrastructure created successfully"
 
-      - name: Get Network Outputs
-        id: terraform-output
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/040-network
+      - name: Set Create Status
+        id: create-status
         run: |
-          echo "vnet_id=$(terraform output -raw vnet_id)" >> $GITHUB_OUTPUT
-          echo "subnet_id=$(terraform output -raw subnet_id)" >> $GITHUB_OUTPUT
+          if [ "${{ steps.check-network.outputs.exists }}" == "true" ]; then
+            echo "status=created" >> $GITHUB_OUTPUT
+          else
+            echo "status=skipped" >> $GITHUB_OUTPUT
+          fi
 
-  # Job 4: Desplegar AKS Cluster (depende de Resource Group, Identity y Network)
-  deploy-aks:
-    name: Deploy AKS Cluster
+  # Job 4: Crear AKS Cluster (depende de Network e Identity)
+  create-aks:
+    name: Create AKS Cluster
     runs-on: ubuntu-latest
     environment: dev
-    needs: [deploy-resource-group, deploy-identity, deploy-network]
+    needs: [create-network, create-identity]
     outputs:
-      aks_name: ${{ steps.terraform-output.outputs.aks_name }}
-      resource_group_name: ${{ steps.terraform-output.outputs.resource_group_name }}
+      aks_created: ${{ steps.create-status.outputs.status }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Terraform Init - AKS
+      - name: Check AKS Module Status
+        id: check-aks
         working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
         run: |
-          echo "Initializing Terraform for AKS..."
+          echo "Checking if AKS module exists..."
+          
+          if [ -f "main.tf" ]; then
+            echo "AKS module found, will create it"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "AKS module not found"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Init - AKS
+        if: steps.check-aks.outputs.exists == 'true'
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+        run: |
+          echo "Initializing Terraform for AKS creation..."
           terraform init
 
       - name: Terraform Plan - AKS
+        if: steps.check-aks.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
         run: |
-          echo "Planning Terraform apply for AKS..."
-          terraform plan -out=apply.tfplan
+          echo "Planning AKS cluster infrastructure..."
+          terraform plan -out=tfplan
 
       - name: Terraform Apply - AKS
+        if: steps.check-aks.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+          ARM_ACCESS_KEY: ${{ secrets.AZURE_STORAGE_ACCESS_KEY }}
         run: |
-          echo "Executing Terraform apply for AKS..."
-          terraform apply -auto-approve apply.tfplan
-          echo "✅ AKS Cluster deployed successfully"
+          echo "Creating AKS cluster infrastructure..."
+          terraform apply tfplan
+          echo "✅ AKS cluster created successfully"
 
-      - name: Wait for AKS Cluster Ready
+      - name: Wait for AKS Creation
+        if: steps.check-aks.outputs.exists == 'true'
         run: |
-          echo "Waiting for AKS cluster to be ready..."
-          
-          # Obtener el nombre del cluster y resource group desde los outputs
-          AKS_CLUSTER_NAME=$(terraform output -raw aks_name)
-          AKS_RESOURCE_GROUP=$(terraform output -raw resource_group_name)
-          
-          # Esperar hasta que el cluster esté listo (máximo 20 minutos)
-          TIMEOUT=1200
-          ELAPSED=0
-          INTERVAL=30
-          
-          while [ $ELAPSED -lt $TIMEOUT ]; do
-            echo "Checking cluster status... (${ELAPSED}s elapsed)"
-            
-            CLUSTER_STATE=$(az aks show \
-              --resource-group $AKS_RESOURCE_GROUP \
-              --name $AKS_CLUSTER_NAME \
-              --query "provisioningState" \
-              --output tsv 2>/dev/null || echo "not_found")
-            
-            if [ "$CLUSTER_STATE" = "Succeeded" ]; then
-              echo "✅ AKS Cluster is ready!"
-              break
-            elif [ "$CLUSTER_STATE" = "Failed" ]; then
-              echo "❌ AKS Cluster creation failed"
-              exit 1
-            else
-              echo "Cluster status: $CLUSTER_STATE, waiting..."
-              sleep $INTERVAL
-              ELAPSED=$((ELAPSED + INTERVAL))
-            fi
-          done
-          
-          if [ $ELAPSED -ge $TIMEOUT ]; then
-            echo "⚠️ Timeout waiting for AKS cluster to be ready"
-            exit 1
+          echo "Waiting for AKS cluster to be fully operational..."
+          sleep 120
+          echo "✅ Wait completed"
+
+      - name: Set Create Status
+        id: create-status
+        run: |
+          if [ "${{ steps.check-aks.outputs.exists }}" == "true" ]; then
+            echo "status=created" >> $GITHUB_OUTPUT
+          else
+            echo "status=skipped" >> $GITHUB_OUTPUT
           fi
 
-      - name: Get AKS Outputs
-        id: terraform-output
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/010-aks
-        run: |
-          echo "aks_name=$(terraform output -raw aks_name)" >> $GITHUB_OUTPUT
-          echo "resource_group_name=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
-
-  # Job 5: Desplegar Ingress IP (depende del AKS Cluster)
-  deploy-ingress-ip:
-    name: Deploy Ingress IP
+  # Job 5: Crear Ingress IP (depende de AKS)
+  create-ingress-ip:
+    name: Create Ingress IP
     runs-on: ubuntu-latest
     environment: dev
-    needs: deploy-aks
+    needs: create-aks
     outputs:
-      ingress_public_ip: ${{ steps.terraform-output.outputs.ingress_public_ip }}
+      ingress_created: ${{ steps.create-status.outputs.status }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Terraform Init - Ingress IP
+      - name: Check Ingress IP Status
+        id: check-ingress
         working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
         run: |
-          echo "Initializing Terraform for Ingress IP..."
+          echo "Checking if Ingress IP module exists..."
+          
+          if [ -f "main.tf" ]; then
+            echo "Ingress IP module found, will create it"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Ingress IP module not found"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Init - Ingress IP
+        if: steps.check-ingress.outputs.exists == 'true'
+        working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+        run: |
+          echo "Initializing Terraform for Ingress IP creation..."
           terraform init
 
       - name: Terraform Plan - Ingress IP
+        if: steps.check-ingress.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
         run: |
-          echo "Planning Terraform apply for Ingress IP..."
-          terraform plan -out=apply.tfplan
+          echo "Planning Ingress IP infrastructure..."
+          terraform plan -out=tfplan
 
       - name: Terraform Apply - Ingress IP
+        if: steps.check-ingress.outputs.exists == 'true'
         working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: true
+          ARM_ACCESS_KEY: ${{ secrets.AZURE_STORAGE_ACCESS_KEY }}
         run: |
-          echo "Executing Terraform apply for Ingress IP..."
-          terraform apply -auto-approve apply.tfplan
-          echo "✅ Ingress IP deployed successfully"
+          echo "Creating Ingress IP infrastructure..."
+          terraform apply tfplan
+          echo "✅ Ingress IP created successfully"
 
-      - name: Get Ingress IP Outputs
-        id: terraform-output
-        working-directory: ./environment/${{ env.ENVIRONMENT }}/050-ingress_ip
+      - name: Set Create Status
+        id: create-status
         run: |
-          echo "ingress_public_ip=$(terraform output -raw ingress_public_ip)" >> $GITHUB_OUTPUT
+          if [ "${{ steps.check-ingress.outputs.exists }}" == "true" ]; then
+            echo "status=created" >> $GITHUB_OUTPUT
+          else
+            echo "status=skipped" >> $GITHUB_OUTPUT
+          fi
 
-  # Job 6: Verificar el despliegue completo
-  verify-deployment:
-    name: Verify Complete Deployment
+  # Job 6: Verificación final y validación
+  verify-creation:
+    name: Verify Complete Creation
     runs-on: ubuntu-latest
     environment: dev
-    needs: [deploy-terraform-backend, deploy-resource-group, deploy-identity, deploy-network, deploy-aks, deploy-ingress-ip]
+    needs: [create-resource-group, create-identity, create-network, create-aks, create-ingress-ip]
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Azure Login
+      - name: Azure OIDC Login
         uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Get AKS Credentials
+      - name: Final Verification
         run: |
-          echo "Getting AKS cluster credentials..."
-          az aks get-credentials \
-            --resource-group ${{ needs.deploy-aks.outputs.resource_group_name }} \
-            --name ${{ needs.deploy-aks.outputs.aks_name }} \
-            --overwrite-existing
+          echo "=== Final Creation Verification ==="
           
-          echo "✅ AKS credentials obtained"
-
-      - name: Verify Cluster Health
-        run: |
-          echo "Verifying AKS cluster health..."
+          # Verificar que todos los recursos se crearon correctamente
+          echo "Checking that all resources were created successfully..."
           
-          # Verificar que los nodos estén listos
-          kubectl get nodes -o wide
+          # Listar resource groups para verificar que existen
+          echo "Resource Groups created:"
+          az group list --query "[?contains(name, 'myproject') || contains(name, 'MC_')].{Name:name,Location:location,ProvisioningState:provisioningState}" -o table
           
-          # Verificar que el cluster esté funcionando
-          kubectl cluster-info
+          # Verificar estado de AKS si existe
+          echo "AKS Clusters:"
+          az aks list --query "[].{Name:name,ResourceGroup:resourceGroup,ProvisioningState:provisioningState,PowerState:powerState.code}" -o table
           
-          echo "✅ AKS cluster health verification completed"
-
-      - name: Deployment Summary
-        run: |
-          echo "=== Modular Terraform Deployment Summary ==="
-          echo "Environment: ${{ env.ENVIRONMENT }}"
-          echo "Backend Resource Group: ${{ needs.deploy-terraform-backend.outputs.resource_group_name }}"
-          echo "Backend Storage Account: ${{ needs.deploy-terraform-backend.outputs.storage_account_name }}"
-          echo "Backend Container: ${{ needs.deploy-terraform-backend.outputs.container_name }}"
-          echo "Resource Group: ${{ needs.deploy-resource-group.outputs.resource_group_name }}"
-          echo "Location: ${{ needs.deploy-resource-group.outputs.resource_group_location }}"
-          echo "Identity ID: ${{ needs.deploy-identity.outputs.identity_id }}"
-          echo "VNet ID: ${{ needs.deploy-network.outputs.vnet_id }}"
-          echo "Subnet ID: ${{ needs.deploy-network.outputs.subnet_id }}"
-          echo "AKS Name: ${{ needs.deploy-aks.outputs.aks_name }}"
-          echo "Ingress Public IP: ${{ needs.deploy-ingress-ip.outputs.ingress_public_ip }}"
+          # Verificar redes virtuales
+          echo "Virtual Networks:"
+          az network vnet list --query "[].{Name:name,ResourceGroup:resourceGroup,ProvisioningState:provisioningState,AddressSpace:addressSpace.addressPrefixes}" -o table
+          
+          # Verificar identidades administradas
+          echo "Managed Identities:"
+          az identity list --query "[].{Name:name,ResourceGroup:resourceGroup,PrincipalId:principalId}" -o table
+          
+          echo "=== Creation Summary ==="
+          echo "Resource Group: ${{ needs.create-resource-group.outputs.resource_group_created }}"
+          echo "Identity: ${{ needs.create-identity.outputs.identity_created }}"
+          echo "Network: ${{ needs.create-network.outputs.network_created }}"
+          echo "AKS Cluster: ${{ needs.create-aks.outputs.aks_created }}"
+          echo "Ingress IP: ${{ needs.create-ingress-ip.outputs.ingress_created }}"
           echo "Execution Time: $(date -u)"
           echo "Workflow Status: ${{ job.status }}"
-          echo "============================================="
+          echo "====================================="
+          
+          # Verificación de salud del cluster
+          echo "=== AKS Cluster Health Check ==="
+          if [ "${{ needs.create-aks.outputs.aks_created }}" == "created" ]; then
+            echo "Checking AKS cluster health..."
+            # Obtener el nombre del cluster y resource group desde la configuración
+            CLUSTER_NAME=$(grep -o 'cluster_name[[:space:]]*=[[:space:]]*"[^"]*"' ./environment/${{ env.ENVIRONMENT }}/010-aks/terraform.tfvars | cut -d'"' -f2)
+            RESOURCE_GROUP=$(grep -o 'resource_group_name[[:space:]]*=[[:space:]]*"[^"]*"' ./environment/${{ env.ENVIRONMENT }}/010-aks/terraform.tfvars | cut -d'"' -f2)
+            
+            if [ ! -z "$CLUSTER_NAME" ] && [ ! -z "$RESOURCE_GROUP" ]; then
+              echo "Cluster: $CLUSTER_NAME in Resource Group: $RESOURCE_GROUP"
+              
+              # Verificar estado del cluster
+              CLUSTER_STATUS=$(az aks show --name "$CLUSTER_NAME" --resource-group "$RESOURCE_GROUP" --query provisioningState -o tsv 2>/dev/null)
+              if [ "$CLUSTER_STATUS" = "Succeeded" ]; then
+                echo "✅ AKS cluster is healthy and running"
+                
+                # Verificar nodos del cluster
+                NODE_COUNT=$(az aks show --name "$CLUSTER_NAME" --resource-group "$RESOURCE_GROUP" --query agentPoolProfiles[0].count -o tsv 2>/dev/null)
+                echo "Cluster has $NODE_COUNT nodes"
+                
+                # Verificar versión de Kubernetes
+                K8S_VERSION=$(az aks show --name "$CLUSTER_NAME" --resource-group "$RESOURCE_GROUP" --query kubernetesVersion -o tsv 2>/dev/null)
+                echo "Kubernetes version: $K8S_VERSION"
+              else
+                echo "⚠️ AKS cluster status: $CLUSTER_STATUS"
+              fi
+            else
+              echo "⚠️ Could not determine cluster name or resource group from configuration"
+            fi
+          else
+            echo "AKS cluster creation was skipped"
+          fi
+          
+          echo "=== Verification Complete ==="

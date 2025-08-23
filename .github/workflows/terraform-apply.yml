@@ -94,7 +94,7 @@ jobs:
       - name: Validate Tags
         run: |
           echo "=== Tags Validation ==="
-          TAGS="${{ github.event.inputs.tags }}"
+          TAGS='${{ github.event.inputs.tags }}'
           
           if [ "$TAGS" != "{}" ]; then
             echo "Tags provided: $TAGS"

@@ -1,6 +1,7 @@
 variable "name_prefix" {
   description = "Prefijo base para nombrar recursos (kebab-case, corto)."
   type        = string
+  default     = "myproject"
   sensitive   = true
 }
 

@@ -1,4 +1,4 @@
-name: Terraform Apply AKS Cluster - Modular Construction
+name: Terraform Apply AKS Cluster - Modular Construction - ME (Multi Environment)
 
 on:
   workflow_dispatch:
